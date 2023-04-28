@@ -145,6 +145,8 @@ pub fn module<'a>(context: &'a Context) -> Option<Module<'a>> {
         .filter_map(|filename| get_kube_ctx_component(filename, &kube_ctx))
         .collect();
 
+    let context_alias = get_kube_context_name(&config, &kube_ctx);
+
     let parsed = StringFormatter::new(config.format).and_then(|formatter| {
         formatter
             .map_meta(|variable, _| match variable {
@@ -152,11 +154,18 @@ pub fn module<'a>(context: &'a Context) -> Option<Module<'a>> {
                 _ => None,
             })
             .map_style(|variable| match variable {
-                "style" => Some(Ok(config.style)),
+                "style" => {
+                    let color = config
+                        .context_color
+                        .get(context_alias.as_ref())
+                        .unwrap_or(&"gray");
+                    let style = config.style.replace("dep-color", color);
+                    Some(Ok(style))
+                }
                 _ => None,
             })
             .map(|variable| match variable {
-                "context" => Some(Ok(get_kube_context_name(&config, &kube_ctx))),
+                "context" => Some(Ok(context_alias.to_owned())),
 
                 "namespace" => ctx_components
                     .iter()
