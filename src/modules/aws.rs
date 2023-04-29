@@ -82,21 +82,22 @@ fn get_profile_creds<'a>(
     }
 }
 
-fn get_aws_region_from_config(
+fn get_aws_value_from_config(
     context: &Context,
     aws_profile: &Option<Profile>,
     aws_config: &AwsConfigFile,
-) -> Option<Region> {
+    key: &str,
+) -> Option<String> {
     let config = get_config(context, aws_config)?;
     let section = get_profile_config(config, aws_profile.as_ref())?;
 
-    section.get("region").map(std::borrow::ToOwned::to_owned)
+    section.get(key).map(std::borrow::ToOwned::to_owned)
 }
 
-fn get_aws_profile_and_region(
+fn get_aws_profile_and_region_and_color(
     context: &Context,
     aws_config: &AwsConfigFile,
-) -> (Option<Profile>, Option<Region>) {
+) -> (Option<Profile>, Option<Region>, Option<String>) {
     let profile_env_vars = [
         "AWSU_PROFILE",
         "AWS_VAULT",
@@ -108,18 +109,14 @@ fn get_aws_profile_and_region(
     let profile = profile_env_vars
         .iter()
         .find_map(|env_var| context.get_env(env_var));
+
     let region = region_env_vars
         .iter()
-        .find_map(|env_var| context.get_env(env_var));
-    match (profile, region) {
-        (Some(p), Some(r)) => (Some(p), Some(r)),
-        (None, Some(r)) => (None, Some(r)),
-        (Some(p), None) => (
-            Some(p.clone()),
-            get_aws_region_from_config(context, &Some(p), aws_config),
-        ),
-        (None, None) => (None, get_aws_region_from_config(context, &None, aws_config)),
-    }
+        .find_map(|env_var| context.get_env(env_var))
+        .or_else(|| get_aws_value_from_config(context, &profile, aws_config, "region"));
+    let color = get_aws_value_from_config(context, &profile, aws_config, "color");
+
+    (profile, region, color)
 }
 
 fn get_credentials_duration(
@@ -241,7 +238,8 @@ pub fn module<'a>(context: &'a Context) -> Option<Module<'a>> {
     let aws_config = OnceCell::new();
     let aws_creds = OnceCell::new();
 
-    let (aws_profile, aws_region) = get_aws_profile_and_region(context, &aws_config);
+    let (aws_profile, aws_region, color) =
+        get_aws_profile_and_region_and_color(context, &aws_config);
     if aws_profile.is_none() && aws_region.is_none() {
         return None;
     }
@@ -278,7 +276,13 @@ pub fn module<'a>(context: &'a Context) -> Option<Module<'a>> {
                 _ => None,
             })
             .map_style(|variable| match variable {
-                "style" => Some(Ok(config.style)),
+                "style" => {
+                    let color = color
+                        .as_ref()
+                        .map(|s| "#".to_owned() + s)
+                        .unwrap_or_default();
+                    Some(Ok(config.style.replace("dep-color", color.as_str())))
+                }
                 _ => None,
             })
             .map(|variable| match variable {
