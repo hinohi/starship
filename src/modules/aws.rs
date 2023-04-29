@@ -232,7 +232,7 @@ pub fn module<'a>(context: &'a Context) -> Option<Module<'a>> {
 
     let (aws_profile, aws_region, color) =
         get_aws_profile_and_region_and_color(context, &aws_config);
-    if aws_profile.is_none() && aws_region.is_none() {
+    if aws_profile.is_none() {
         return None;
     }
 
